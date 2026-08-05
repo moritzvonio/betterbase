@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const PROTECTED_PREFIXES = ["/leagues", "/league", "/account", "/upgrade"];
+// /upgrade ist während der offenen Beta eine öffentliche Infoseite; kommt mit
+// dem Pricing zurück in die geschützten Routen (FREE_BETA in lib/entitlement).
+const PROTECTED_PREFIXES = ["/leagues", "/league", "/account"];
 const SESSION_COOKIE = "bb_session";
 
 export function proxy(req: NextRequest) {
@@ -19,5 +21,5 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/leagues/:path*", "/league/:path*", "/account/:path*", "/upgrade/:path*"],
+  matcher: ["/leagues/:path*", "/league/:path*", "/account/:path*"],
 };
