@@ -54,12 +54,16 @@ export async function assembleCompetitionStats(
 ): Promise<CompetitionData | null> {
   const path = `/league/${leagueId}/wettbewerb`;
 
-  const [ranking, overview, ownAchievements, myRealBudget] = await Promise.all([
+  const [ranking, overview, ownAchievementsRaw, myRealBudget] = await Promise.all([
     withKbAuth(path, () => kb.ranking(token, leagueId)).catch(() => ({} as Awaited<ReturnType<typeof kb.ranking>>)),
     withKbAuth(path, () => kb.leagueOverviewWithManagers(token, leagueId)).catch(() => ({} as Awaited<ReturnType<typeof kb.leagueOverviewWithManagers>>)),
-    withKbAuth(path, () => kb.userAchievementsTotal(token, leagueId)).catch(() => ({ items: [], total: 0 })),
+    // Bewusst `null` statt `{ total: 0 }`: "Abruf gepatzt" und "Liga hat noch
+    // keine Erfolge" sind NICHT dasselbe. Die Startbudget-Messung darf nur mit
+    // einem echt abgerufenen Wert rechnen, sonst brennt sie sich falsch ein.
+    withKbAuth(path, () => kb.userAchievementsTotal(token, leagueId)).catch(() => null),
     withKbAuth(path, () => kb.myBudget(token, leagueId)).catch(() => null),
   ]);
+  const ownAchievements = ownAchievementsRaw ?? { items: [], total: 0 };
 
   const members = ranking.us ?? ranking.it ?? [];
   if (members.length === 0) return null;
@@ -179,15 +183,21 @@ export async function assembleCompetitionStats(
     leagueStartMs,
     meRealCash,
     preloaded: collect ?? undefined,
-    ownComponents: ownStats
-      ? {
-          transferNet: ownStats.transferBalance,
-          pointsPremium: ownStats.estimatedPointsBonus,
-          winBonus: ownStats.estimatedWinBonus,
-          achievementsTotal: ownStats.realAchievementBonus ?? ownStats.estimatedAchievementBonus,
-          daysSinceStart,
-        }
-      : undefined,
+    // Nur messen, wenn die Erfolge WIRKLICH abgerufen wurden. `ownStats`
+    // liefert sonst die Schätzung (inklusive der 2,2 Mio Pauschale aus der
+    // Referenzliga), und die würde sich als "gemessenes" Startbudget
+    // dauerhaft einbrennen. Fehlt der Wert, schreibt der Collector bei junger
+    // Liga bewusst nichts und ein späterer Besuch misst nach.
+    ownComponents:
+      ownStats && ownAchievementsRaw
+        ? {
+            transferNet: ownStats.transferBalance,
+            pointsPremium: ownStats.estimatedPointsBonus,
+            winBonus: ownStats.estimatedWinBonus,
+            achievementsTotal: ownAchievementsRaw.total,
+            daysSinceStart,
+          }
+        : undefined,
   };
 
   // Sammeln blockiert den Seitenaufruf nicht: Next führt das nach dem Response aus.

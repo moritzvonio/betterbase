@@ -200,7 +200,8 @@ function writeLocalPlannerState(storageKey: string, serialized: string): void {
 async function uploadPlannerState(
   leagueId: string,
   serialized: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  keepalive = false
 ): Promise<boolean> {
   try {
     const res = await fetch(`/api/planner/${encodeURIComponent(leagueId)}`, {
@@ -208,6 +209,8 @@ async function uploadPlannerState(
       headers: { "Content-Type": "application/json" },
       body: serialized,
       signal,
+      // Beim Verlassen der Seite überlebt der Request so das Entladen.
+      keepalive,
     });
     if (!res.ok) return false;
     const data = (await res.json().catch(() => null)) as { ok?: unknown } | null;
@@ -304,6 +307,11 @@ export function Planner({
   const [hydrated, setHydrated] = useState(false);
   const remoteSnapshotRef = useRef<string | null>(null);
   const skipInitialPersistRef = useRef<string | null>(null);
+  const pendingUploadRef = useRef<string | null>(null);
+  const leagueIdRef = useRef(leagueId);
+  useEffect(() => {
+    leagueIdRef.current = leagueId;
+  }, [leagueId]);
   // Der Hydrate-Effect darf NICHT von `initialState` abhängen: die Seite ist
   // force-dynamic, ein neuer RSC-Payload gibt `players` eine neue Identität,
   // und ein zweiter Hydrate-Lauf würde den gerade bearbeiteten Plan mit dem
@@ -394,16 +402,45 @@ export function Planner({
       return;
     }
 
+    // Noch nicht beim Konto angekommen. Wird beim Verlassen der Seite gebraucht.
+    pendingUploadRef.current = serialized;
+
     const timeout = window.setTimeout(() => {
       uploadPlannerState(leagueId, serialized)
         .then((uploaded) => {
-          if (uploaded) remoteSnapshotRef.current = serialized;
+          if (uploaded) {
+            remoteSnapshotRef.current = serialized;
+            if (pendingUploadRef.current === serialized) pendingUploadRef.current = null;
+          }
         })
         .catch(() => undefined);
     }, 1500);
 
     return () => window.clearTimeout(timeout);
   }, [state, storageKey, hydrated, leagueId]);
+
+  // Beim Verlassen der Seite den ausstehenden Stand noch rausschicken.
+  // Ohne das ginge jede Änderung verloren, die innerhalb der 1,5 Sekunden
+  // Verzögerung gemacht wurde: der Timer stirbt mit der Komponente, und der
+  // nächste Aufruf holt den älteren Server-Stand und schreibt ihn auch noch
+  // über den lokalen Cache. Eigener Effect ohne Dependencies, damit das NUR
+  // beim Unmount passiert und nicht bei jeder Zustandsaenderung.
+  useEffect(() => {
+    const flush = () => {
+      const pending = pendingUploadRef.current;
+      if (!pending || pending === remoteSnapshotRef.current) return;
+      pendingUploadRef.current = null;
+      void uploadPlannerState(leagueIdRef.current, pending, undefined, true);
+    };
+
+    // `pagehide` deckt ab, was der Unmount NICHT abdeckt: Tab schließen,
+    // Reload, Zurück-Navigation. Dabei läuft kein React-Cleanup.
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, []);
 
   const playerById = useMemo(() => {
     const m = new Map<string, PlannerPlayer>();

@@ -98,7 +98,15 @@ export async function addPushSubscription(
   const current = res.list ?? [];
   const next = [
     ...current.filter((item) => item.endpoint !== sub.endpoint),
-    { ...sub, userId, createdAt },
+    // Felder einzeln übernehmen statt `...sub` zu spreaden: der Typ schützt
+    // zur Laufzeit nicht, und sobald ein Aufrufer hier einen rohen Request-Body
+    // durchreicht, landet sonst alles Mitgeschickte in KV.
+    {
+      endpoint: sub.endpoint,
+      keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth },
+      userId,
+      createdAt,
+    },
   ];
 
   // Cap 5 Geräte: Beim sechsten Gerät fällt der älteste Eintrag nach

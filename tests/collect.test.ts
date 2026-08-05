@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildDayEntry, collectOnVisit, round500k } from "../lib/collect/collector";
+import { buildDayEntry, collectOnVisit, daySum, round500k } from "../lib/collect/collector";
 import {
   recordCashAnchor,
   type LeagueCollectAnchors,
@@ -60,6 +60,23 @@ describe("buildDayEntry", () => {
   });
 });
 
+describe("daySum", () => {
+  it("summiert die Spieltagspunkte und meldet fehlende Tage mit -1", () => {
+    expect(daySum(undefined)).toBe(-1);
+    expect(
+      daySum({ perManager: { a: { mdp: 120, mdpl: 1 }, b: { mdp: 80, mdpl: 2 } }, collectedAt: 0 })
+    ).toBe(200);
+  });
+
+  it("bewertet einen Zwischenstand niedriger als den fertigen Spieltag", () => {
+    // Genau die Regel, mit der ein zu früh eingesammelter Spieltag geheilt
+    // wird: während eines Spieltags wachsen die Punkte, sie schrumpfen nicht.
+    const zwischenstand = { perManager: { a: { mdp: 40, mdpl: 1 } }, collectedAt: 0 };
+    const fertig = { perManager: { a: { mdp: 190, mdpl: 1 } }, collectedAt: 0 };
+    expect(daySum(fertig)).toBeGreaterThan(daySum(zwischenstand));
+  });
+});
+
 describe("collectOnVisit: Startbudget", () => {
   // day: 0 -> kein Backfill, also kein Netzwerkzugriff aus dem Test heraus.
   const ranking = { us: [{ i: "u1", n: "A", tv: 12_000_000 }], day: 0 } as unknown as KbRankingResponse;
@@ -101,6 +118,24 @@ describe("collectOnVisit: Startbudget", () => {
     expect(budget?.source).toBe("measured");
     // 48,3M + 2M - 0,3M - 0,1M - 10k Tagesbonus = 49,89M -> auf 500k gerundet
     expect(budget?.value).toBe(50_000_000);
+  });
+
+  it("misst NICHT, wenn die Erfolge nicht abgerufen werden konnten", async () => {
+    // Ohne echten Erfolge-Wert wuerde die Schätzung (inkl. 2,2 Mio Pauschale)
+    // in die Rechnung fließen und ein um Millionen falsches Startbudget als
+    // "gemessen" festschreiben. Dann lieber gar nichts schreiben.
+    const leagueId = "junge-liga-ohne-erfolge";
+    await collectOnVisit({
+      token: "t",
+      leagueId,
+      userId: "u1",
+      ranking,
+      leagueStartMs: Date.now() - DAY_MS,
+      meRealCash: 48_300_000,
+      // ownComponents fehlt, weil der Erfolge-Abruf gepatzt hat
+    });
+
+    expect(collectMem()?.meta.get(leagueId)?.startBudget).toBeUndefined();
   });
 
   it("schreibt bei einer alten Liga einmalig das Standardbudget fest", async () => {

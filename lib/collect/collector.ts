@@ -55,6 +55,12 @@ function finiteNumber(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** Summe der Spieltagspunkte eines gespeicherten Tages (Vollständigkeits-Maß). */
+export function daySum(entry: LeagueCollectDays[number] | undefined): number {
+  if (!entry) return -1;
+  return Object.values(entry.perManager).reduce((s, v) => s + finiteNumber(v.mdp), 0);
+}
+
 export function buildDayEntry(resp: unknown): LeagueCollectDays[number] | null {
   const perManager: LeagueCollectDays[number]["perManager"] = {};
   let pointsSum = 0;
@@ -146,11 +152,32 @@ export async function collectOnVisit(opts: CollectOnVisitOpts): Promise<void> {
         .filter((day) => !Object.prototype.hasOwnProperty.call(days, day))
         .slice(0, 5);
 
-      for (const day of missingDays) {
+      // Der aktuelle Spieltag kann beim ersten Einsammeln noch GELAUFEN sein.
+      // `ranking.day` ist der laufende Spieltag, nicht der letzte beendete
+      // (`lfmd` taugt dafür nicht: gemessen am 05.08.2026 liefert die API
+      // day=34 bei lfmd=1). Deshalb fassen wir beim aktuellen Tag noch einmal
+      // nach, solange die Punkte noch wachsen.
+      const targets = Object.prototype.hasOwnProperty.call(days, currentDay)
+        ? [...missingDays, currentDay]
+        : missingDays;
+
+      for (const day of targets) {
         const resp = await kb.ranking(token, leagueId, day).catch(() => null);
-        if (Object.prototype.hasOwnProperty.call(days, day)) continue;
         const entry = resp ? buildDayEntry(resp) : null;
-        if (entry) {
+        if (!entry) continue;
+
+        const stored = days[day];
+        if (!stored) {
+          days[day] = entry;
+          daysChanged = true;
+          continue;
+        }
+        // Vorhandenen Tag NUR durch eine vollständigere Antwort ersetzen.
+        // Punkte wachsen während eines Spieltags, sie schrumpfen nicht - eine
+        // niedrigere Summe ist also eine schlechtere Momentaufnahme und wird
+        // verworfen. Das schützt weiterhin vor genullten Off-Season-Antworten
+        // und heilt gleichzeitig einen zu früh eingefrorenen Zwischenstand.
+        if (daySum(entry) > daySum(stored)) {
           days[day] = entry;
           daysChanged = true;
         }

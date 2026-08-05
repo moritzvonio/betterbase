@@ -17,7 +17,15 @@ export async function GET(
 
   const { leagueId } = await params;
   const stored = await loadPlannerPlan(s.userId, leagueId);
-  if (!stored.ok || stored.plan === null) {
+
+  // "Speicher gerade nicht erreichbar" ist NICHT "der Nutzer hat noch keinen
+  // Plan". Wer beides als `plan: null` ausliefert, sagt dem Client "hier ist
+  // nichts, lad deinen lokalen Stand hoch" - und ein transienter KV-Fehler
+  // würde einen echten Server-Plan mit einem älteren lokalen überschreiben.
+  if (!stored.ok) {
+    return NextResponse.json({ error: "STORE_UNAVAILABLE" }, { status: 503 });
+  }
+  if (stored.plan === null) {
     return NextResponse.json({ plan: null });
   }
 

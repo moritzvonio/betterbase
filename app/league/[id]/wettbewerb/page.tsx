@@ -248,10 +248,13 @@ function MethodologyCard({
   initialBudget: number;
   residualRate: number;
 }) {
+  // Label aus dem TATSÄCHLICH verwendeten Betrag ableiten, nicht aus einem
+  // festen Text: `detectInitialBudget()` kann über INITIAL_BUDGET_EUR einen
+  // anderen Wert liefern, dann wäre "Standard 50 Mio" schlicht gelogen.
   const startBudgetLabel =
     collect?.startBudgetSource === "measured"
       ? "(gemessen)"
-      : "(Standard 50 Mio angenommen)";
+      : `(Standard ${formatEUR(initialBudget, { compact: true })} angenommen)`;
 
   const matchdayDataLabel =
     collect && collect.daysPlayed > 0
@@ -268,8 +271,8 @@ function MethodologyCard({
         <div>
           Cash = <span className="font-mono text-foreground">{formatEUR(initialBudget, { compact: true })}</span> Start
           + Transferbilanz + Punkteprämie (1.000 € × Punkt) + Spieltagssiege (1 Mio × Sieg)
-          + Tagesbonus (100k-Streak) + Erfolge. Das Regelwerk ist empirisch gegen
-          echte Kontostände verifiziert.
+          + Tagesbonus (100k-Streak) + Erfolge + Rest-Term. Prämien und Siege sind
+          exakt, die übrigen Bausteine sind an deinem echten Kontostand geeicht.
         </div>
         {collect && (
           <div>

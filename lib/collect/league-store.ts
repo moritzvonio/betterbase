@@ -21,7 +21,16 @@ export type LeagueCollectDays = Record<
   { perManager: Record<string, { mdp: number; mdpl: number }>; collectedAt: number }
 >;
 
-/** userId -> ISO-Datum (YYYY-MM-DD) -> echter Cash */
+/**
+ * userId -> ISO-Datum (YYYY-MM-DD) -> echter Cash
+ *
+ * ACHTUNG, bevor hier jemals gelesen wird: Dieser Key ist LIGA-weit, enthält
+ * aber den ECHTEN Kontostand jedes einzelnen Besuchers (aus /me/budget). Er ist
+ * heute bewusst nur Schreibziel und hat keinen Lesepfad. Wer einen baut, darf
+ * einem Nutzer NUR seinen eigenen Eintrag zeigen - sonst sieht jedes
+ * Ligamitglied die echten Kontostände aller anderen, und genau die zu schätzen
+ * ist der Sinn dieser App.
+ */
 export type LeagueCollectAnchors = Record<string, Record<string, number>>;
 
 const KV = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
