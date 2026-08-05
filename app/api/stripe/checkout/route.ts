@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
+import { FREE_BETA } from "@/lib/entitlement";
 import { getStripe, STRIPE_PRICES, planFromString } from "@/lib/stripe";
 import { env } from "@/lib/env";
 
@@ -11,6 +12,18 @@ const Body = z.object({
 });
 
 export async function POST(req: Request) {
+  // Offene Beta: es darf niemand für etwas zahlen, das gerade gratis ist –
+  // Kill-Switch VOR jeder Stripe-Interaktion.
+  if (FREE_BETA) {
+    return NextResponse.json(
+      {
+        error: "BETA_FREE",
+        message: "Ligabase ist in der offenen Beta kostenlos – es gibt nichts zu kaufen.",
+      },
+      { status: 503 }
+    );
+  }
+
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });

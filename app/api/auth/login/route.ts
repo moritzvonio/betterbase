@@ -4,7 +4,7 @@ import { kb } from "@/lib/kickbase/api";
 import { KickbaseError } from "@/lib/kickbase/client";
 import { decodeKickbaseToken, setSessionCookie } from "@/lib/session";
 import { recordLogin } from "@/lib/admin/analytics";
-import { recordFirstLoginTrial } from "@/lib/entitlement";
+import { FREE_BETA, recordFirstLoginTrial } from "@/lib/entitlement";
 import { creditReferral } from "@/lib/referral";
 
 export const runtime = "nodejs";
@@ -81,8 +81,10 @@ export async function POST(req: Request) {
   // Rückgabe = ob dies der Erstlogin war (für die Referral-Gutschrift).
   const isFirstLogin = await recordFirstLoginTrial(userId).catch(() => false);
 
-  // Referral: nur beim Erstlogin, kein Selbst-Referral.
-  if (isFirstLogin && parsed.ref && parsed.ref !== userId) {
+  // Referral: nur beim Erstlogin, kein Selbst-Referral. In der offenen Beta
+  // ausgesetzt – sonst entstehen stille 14-Tage-Boni, die beim späteren
+  // Pricing-Start unerklärt aufpoppen würden.
+  if (!FREE_BETA && isFirstLogin && parsed.ref && parsed.ref !== userId) {
     await creditReferral(parsed.ref).catch(() => {});
   }
 

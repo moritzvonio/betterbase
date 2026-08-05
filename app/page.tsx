@@ -575,7 +575,6 @@ function Pricing() {
             price="0 €"
             period="während der Beta"
             tagline="Einloggen mit Kickbase – mehr braucht es nicht."
-            highlight="Offene Beta"
             features={[
               { ok: true, text: "Liga-Dashboard & Tabelle" },
               { ok: true, text: "Wettbewerb: Kontostände + Max-Gebote aller Manager" },
@@ -808,7 +807,7 @@ function SiteFooter() {
           <FooterCol title="Produkt">
             <Link href="/login">Login</Link>
             <a href="#features">Features</a>
-            <a href="#pricing">Preise</a>
+            <a href="#pricing">Beta</a>
             <a href="#faq">FAQ</a>
             <Link href="/blog">Blog & Tipps</Link>
           </FooterCol>

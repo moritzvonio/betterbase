@@ -53,11 +53,13 @@ export default function DatenschutzPage() {
           </p>
         </Section>
 
-        <Section title="Zahlungen (Stripe)">
+        <Section title="Zahlungen">
           <p>
-            Für den Pro-Kauf nutzen wir den Zahlungsdienstleister Stripe. Beim Checkout
-            werden die zur Zahlungsabwicklung nötigen Daten direkt an Stripe übermittelt
-            und dort verarbeitet. Wir speichern keine Kreditkartendaten.
+            Ligabase ist in der offenen Beta komplett kostenlos – es findet keine
+            Zahlungsabwicklung statt. Sollte künftig ein bezahlter Pro-Zugang
+            eingeführt werden, würden wir dafür den Zahlungsdienstleister Stripe
+            nutzen; die zur Zahlungsabwicklung nötigen Daten würden direkt an Stripe
+            übermittelt. Wir speichern keine Kreditkartendaten.
           </p>
         </Section>
 
