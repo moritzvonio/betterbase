@@ -22,6 +22,10 @@ import { PositionBadge } from "@/components/ui/position-icon";
 import { formatEUR, formatDelta, cn } from "@/lib/utils";
 import { POSITION_LABELS, teamMeta } from "@/lib/kickbase/types";
 import { PlayerAvatar } from "@/components/ui/player-avatar";
+// Eine Wahrheit für die Form des Plans: der Store definiert sie, Client und
+// Route benutzen dieselbe. Bewusst `import type` - der Import wird beim
+// Kompilieren restlos entfernt, der KV-Code landet also NICHT im Client-Bundle.
+import type { PlannerState } from "@/lib/planner-store";
 import {
   Wallet,
   TrendingUp,
@@ -149,12 +153,6 @@ function canPlacePos(pos: number, c: Counts): boolean {
   return deriveFormation(nd, nm, nf) !== null;
 }
 
-interface PlannerState {
-  /** slotId → playerId (or null) */
-  slots: Record<string, string | null>;
-  /** player ids marked for sale */
-  sells: string[];
-}
 
 function serializePlannerState(state: PlannerState): string {
   return JSON.stringify({ slots: state.slots, sells: state.sells });
