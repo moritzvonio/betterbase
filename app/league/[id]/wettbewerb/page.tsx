@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireSessionOrRedirect } from "@/lib/auth";
 import { getAccess } from "@/lib/entitlement";
-import { assembleCompetitionStats } from "@/lib/competition-data";
+import { assembleCompetitionStats, type CompetitionData } from "@/lib/competition-data";
 import { snapshotConfigured } from "@/lib/snapshot-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,7 @@ import {
   Info,
   Swords,
   Lock,
+  AlertTriangle,
 } from "lucide-react";
 import { Suspense } from "react";
 import { NetWorthChartSection } from "../NetWorthChartSection";
@@ -75,7 +76,7 @@ export default async function WettbewerbPage({
       </div>
     );
   }
-  const { stats, chartManagers, leagueStartMs, initialBudget, residualRate } = data;
+  const { stats, chartManagers, leagueStartMs, initialBudget, residualRate, collect } = data;
 
   const me = stats.find((s) => s.userId === session.userId);
   const others = stats.filter((s) => s.userId !== session.userId);
@@ -110,6 +111,9 @@ export default async function WettbewerbPage({
   return (
     <div className="space-y-6">
       <Header trialEnd={access.trial && !access.pro ? access.trialEnd : undefined} />
+      {Number.isFinite(leagueStartMs) && leagueStartMs < Date.parse("2026-06-01") && (
+        <MultiSeasonBanner />
+      )}
 
       {/* My own card (highlighted) */}
       {me && (
@@ -200,46 +204,105 @@ export default async function WettbewerbPage({
         )}
       </section>
 
-      {/* Methodik-Hinweis */}
-      <Card className="bg-primary/[0.04] border-primary/20 slide-up slide-up-2">
-        <CardContent className="p-4 text-xs text-muted-foreground space-y-2.5">
-          <div className="flex items-center gap-2 text-foreground font-semibold">
-            <Info className="size-3.5 text-primary" />
-            Methodik der Cash-Berechnung
-          </div>
-          <div>
-            Cash = <span className="font-mono text-foreground">{formatEUR(initialBudget, { compact: true })}</span> Start
-            + Transferbilanz + Punkteprämie (1.000 € × Punkt) + Spieltagssiege (1 Mio × Sieg)
-            + Tagesbonus (100k-Streak) + Erfolge. Das Regelwerk ist empirisch gegen
-            echte Kontostände verifiziert.
-          </div>
-          <div className="grid sm:grid-cols-2 gap-x-4 gap-y-1.5">
-            <div>
-              <span className="font-medium text-foreground">📊 Exakt aus Kickbase:</span>
-              <ul className="list-disc ml-4 mt-1">
-                <li><span className="text-emerald-700 font-semibold">Eigener Cash</span>: direkt aus <code className="font-mono">/me/budget</code></li>
-                <li>Alle Käufe + Verkäufe seit Liga-Start (paginiert)</li>
-                <li>Saisonpunkte + Spieltagssiege je Manager (Dashboard)</li>
-                <li>Eigene Erfolge: Σ ac × er aus <code className="font-mono">/user/achievements</code></li>
-              </ul>
-            </div>
-            <div>
-              <span className="font-medium text-foreground">🧮 Geschätzt (für andere Manager):</span>
-              <ul className="list-disc ml-4 mt-1">
-                <li><span className="text-sky-700">Tagesbonus</span>: 100k/Tag als volle Streak seit Liga-Start (kann überschätzen)</li>
-                <li><span className="text-violet-700">Erfolge</span>: exakte Teile (Teamwert, Meister) + Raten, die am eigenen Account geeicht sind</li>
-                <li><span className="text-amber-700">Rest-Term</span>: {residualRate.toFixed(0)} €/Punkt (aus deinem IST-Cash kalibriert)</li>
-              </ul>
-            </div>
-          </div>
-          <div>
-            <span className="font-medium text-foreground">Max-Gebot</span> nach 33 %-Regel:
-            Verkauf an Liga-Bank gibt 67 % des MV.{" "}
-            <span className="font-mono">Cash + 0,67 × MV teuerster Spieler</span> = realistischer Max-Bid.
-          </div>
-        </CardContent>
-      </Card>
+      <MethodologyCard
+        collect={collect}
+        initialBudget={initialBudget}
+        residualRate={residualRate}
+      />
     </div>
+  );
+}
+
+function MultiSeasonBanner() {
+  return (
+    <Card className="border-amber-300 bg-amber-50/40 overflow-hidden relative slide-up slide-up-1">
+      <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-amber-500 to-amber-300" />
+      <CardContent className="p-4">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 ring-1 ring-amber-200">
+            <AlertTriangle className="size-4" />
+          </span>
+          <div className="space-y-1">
+            <h2 className="text-sm font-semibold text-amber-950">
+              Liga läuft über mehrere Saisons
+            </h2>
+            <p className="text-sm text-amber-900">
+              Der aus der Vorsaison übertragene Kontostand und die passiv
+              punktenden Kader lassen sich nicht rekonstruieren. Deshalb ist die
+              Cash-Schätzung für diese Liga deutlich ungenauer. In einer Liga,
+              die frisch zur Saison gestartet ist, ist sie nahezu exakt.
+            </p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MethodologyCard({
+  collect,
+  initialBudget,
+  residualRate,
+}: {
+  collect: CompetitionData["collect"];
+  initialBudget: number;
+  residualRate: number;
+}) {
+  const startBudgetLabel =
+    collect?.startBudgetSource === "measured"
+      ? "(gemessen)"
+      : "(Standard 50 Mio angenommen)";
+
+  const matchdayDataLabel =
+    collect && collect.daysPlayed > 0
+      ? `Spieltagsdaten: ${collect.daysCovered.toLocaleString("de-DE")} von ${collect.daysPlayed.toLocaleString("de-DE")} Spieltagen beobachtet`
+      : "Spieltagsdaten: noch keine Spieltage gespielt";
+
+  return (
+    <Card className="bg-primary/[0.04] border-primary/20 slide-up slide-up-2">
+      <CardContent className="p-4 text-xs text-muted-foreground space-y-2.5">
+        <div className="flex items-center gap-2 text-foreground font-semibold">
+          <Info className="size-3.5 text-primary" />
+          Methodik der Cash-Berechnung
+        </div>
+        <div>
+          Cash = <span className="font-mono text-foreground">{formatEUR(initialBudget, { compact: true })}</span> Start
+          + Transferbilanz + Punkteprämie (1.000 € × Punkt) + Spieltagssiege (1 Mio × Sieg)
+          + Tagesbonus (100k-Streak) + Erfolge. Das Regelwerk ist empirisch gegen
+          echte Kontostände verifiziert.
+        </div>
+        {collect && (
+          <div>
+            <span className="font-medium text-foreground">Datenherkunft:</span>{" "}
+            {matchdayDataLabel} · Startbudget {startBudgetLabel}
+          </div>
+        )}
+        <div className="grid sm:grid-cols-2 gap-x-4 gap-y-1.5">
+          <div>
+            <span className="font-medium text-foreground">📊 Exakt aus Kickbase:</span>
+            <ul className="list-disc ml-4 mt-1">
+              <li><span className="text-emerald-700 font-semibold">Eigener Cash</span>: direkt aus <code className="font-mono">/me/budget</code></li>
+              <li>Alle Käufe + Verkäufe seit Liga-Start (paginiert)</li>
+              <li>Saisonpunkte + Spieltagssiege je Manager (Dashboard)</li>
+              <li>Eigene Erfolge: Σ ac × er aus <code className="font-mono">/user/achievements</code></li>
+            </ul>
+          </div>
+          <div>
+            <span className="font-medium text-foreground">🧮 Geschätzt (für andere Manager):</span>
+            <ul className="list-disc ml-4 mt-1">
+              <li><span className="text-sky-700">Tagesbonus</span>: 100k/Tag als volle Streak seit Liga-Start (kann überschätzen)</li>
+              <li><span className="text-violet-700">Erfolge</span>: exakte Teile (Teamwert, Meister) + Raten, die am eigenen Account geeicht sind</li>
+              <li><span className="text-amber-700">Rest-Term</span>: {residualRate.toFixed(0)} €/Punkt (aus deinem IST-Cash kalibriert)</li>
+            </ul>
+          </div>
+        </div>
+        <div>
+          <span className="font-medium text-foreground">Max-Gebot</span> nach 33 %-Regel:
+          Verkauf an Liga-Bank gibt 67 % des MV.{" "}
+          <span className="font-mono">Cash + 0,67 × MV teuerster Spieler</span> = realistischer Max-Bid.
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
