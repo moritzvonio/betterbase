@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   useDraggable,
@@ -156,6 +156,69 @@ interface PlannerState {
   sells: string[];
 }
 
+function serializePlannerState(state: PlannerState): string {
+  return JSON.stringify({ slots: state.slots, sells: state.sells });
+}
+
+function parsePlannerState(value: unknown): PlannerState | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<PlannerState>;
+  if (!candidate.slots || typeof candidate.slots !== "object" || Array.isArray(candidate.slots)) {
+    return null;
+  }
+
+  const slots: Record<string, string | null> = {};
+  for (const [slotId, playerId] of Object.entries(candidate.slots)) {
+    if (typeof playerId === "string" || playerId === null) {
+      slots[slotId] = playerId;
+    }
+  }
+  if (Object.keys(slots).length === 0) return null;
+
+  const sells = Array.isArray(candidate.sells)
+    ? candidate.sells.filter((id): id is string => typeof id === "string")
+    : [];
+
+  return { slots, sells };
+}
+
+function readLocalPlannerState(storageKey: string): PlannerState | null {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    return raw ? parsePlannerState(JSON.parse(raw)) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalPlannerState(storageKey: string, serialized: string): void {
+  try {
+    localStorage.setItem(storageKey, serialized);
+  } catch {
+    // ignore
+  }
+}
+
+async function uploadPlannerState(
+  leagueId: string,
+  serialized: string,
+  signal?: AbortSignal
+): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/planner/${encodeURIComponent(leagueId)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: serialized,
+      signal,
+    });
+    if (!res.ok) return false;
+    const data = (await res.json().catch(() => null)) as { ok?: unknown } | null;
+    return data?.ok === true;
+  } catch {
+    return false;
+  }
+}
+
 function buildInitialState(players: PlannerPlayer[]): PlannerState {
   const lineup = players.filter((p) => p.lo && p.lo >= 1 && p.lo <= 11);
   const d = lineup.filter((p) => p.pos === 2).length;
@@ -241,32 +304,108 @@ export function Planner({
   const [state, setState] = useState<PlannerState>(initialState);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
-
-  // Hydrate from localStorage
+  const remoteSnapshotRef = useRef<string | null>(null);
+  const skipInitialPersistRef = useRef<string | null>(null);
+  // Der Hydrate-Effect darf NICHT von `initialState` abhängen: die Seite ist
+  // force-dynamic, ein neuer RSC-Payload gibt `players` eine neue Identität,
+  // und ein zweiter Hydrate-Lauf würde den gerade bearbeiteten Plan mit dem
+  // Server-Stand überschreiben (der Upload ist um 1,5 s verzögert).
+  const initialStateRef = useRef(initialState);
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<PlannerState>;
-        if (parsed.slots) {
-          setState({ slots: parsed.slots, sells: parsed.sells ?? [] });
+    initialStateRef.current = initialState;
+  }, [initialState]);
+
+  // Hydrate erst vom Konto, dann als Fallback aus localStorage.
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    // Ohne Deckel bliebe der Planner bei einer hängenden Antwort dauerhaft
+    // unbedienbar, weil `hydrated` jede Interaktion sperrt. Nach dem Timeout
+    // läuft er wie früher rein lokal weiter.
+    const hydrateTimeout = window.setTimeout(() => controller.abort(), 4000);
+
+    async function hydrate() {
+      let didHydrateFromServer = false;
+      let shouldMigrateLocal = false;
+
+      try {
+        const res = await fetch(`/api/planner/${encodeURIComponent(leagueId)}`, {
+          signal: controller.signal,
+        });
+        if (cancelled) return;
+
+        if (res.ok) {
+          const data = (await res.json().catch(() => null)) as { plan?: unknown } | null;
+          if (cancelled) return;
+          const serverPlan = parsePlannerState(data?.plan);
+          if (serverPlan) {
+            const serialized = serializePlannerState(serverPlan);
+            remoteSnapshotRef.current = serialized;
+            setState(serverPlan);
+            writeLocalPlannerState(storageKey, serialized);
+            didHydrateFromServer = true;
+          }
+          shouldMigrateLocal = !serverPlan;
+        }
+      } catch {
+        if (cancelled) return;
+      }
+
+      if (!didHydrateFromServer && !cancelled) {
+        const localPlan = readLocalPlannerState(storageKey);
+        const fallbackPlan = localPlan ?? initialStateRef.current;
+        const serialized = serializePlannerState(fallbackPlan);
+        skipInitialPersistRef.current = serialized;
+
+        if (localPlan) {
+          setState(localPlan);
+          if (shouldMigrateLocal) {
+            // Eigener Controller: der Hydrate-Controller kann durch das Timeout
+            // schon abgebrochen sein, der Upload soll trotzdem durchgehen.
+            const uploaded = await uploadPlannerState(leagueId, serialized);
+            if (uploaded) remoteSnapshotRef.current = serialized;
+          }
         }
       }
-    } catch {
-      // ignore
-    }
-    setHydrated(true);
-  }, [storageKey]);
 
-  // Persist
+      window.clearTimeout(hydrateTimeout);
+      if (!cancelled) setHydrated(true);
+    }
+
+    hydrate();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(hydrateTimeout);
+      controller.abort();
+    };
+  }, [leagueId, storageKey]);
+
+  // Persist lokal sofort und zum Konto gebündelt.
   useEffect(() => {
     if (!hydrated) return;
+    const serialized = serializePlannerState(state);
     try {
-      localStorage.setItem(storageKey, JSON.stringify(state));
+      localStorage.setItem(storageKey, serialized);
     } catch {
       // ignore
     }
-  }, [state, storageKey, hydrated]);
+
+    if (serialized === remoteSnapshotRef.current) return;
+    if (serialized === skipInitialPersistRef.current) {
+      skipInitialPersistRef.current = null;
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      uploadPlannerState(leagueId, serialized)
+        .then((uploaded) => {
+          if (uploaded) remoteSnapshotRef.current = serialized;
+        })
+        .catch(() => undefined);
+    }, 1500);
+
+    return () => window.clearTimeout(timeout);
+  }, [state, storageKey, hydrated, leagueId]);
 
   const playerById = useMemo(() => {
     const m = new Map<string, PlannerPlayer>();
@@ -329,11 +468,13 @@ export function Planner({
   );
 
   const onDragStart = (e: DragStartEvent) => {
+    if (!hydrated) return;
     setActiveId(String(e.active.id));
   };
 
   const onDragEnd = (e: DragEndEvent) => {
     setActiveId(null);
+    if (!hydrated) return;
     if (!e.over) return;
     const playerId = String(e.active.id);
     const overId = String(e.over.id);
@@ -383,6 +524,7 @@ export function Planner({
   };
 
   const removeFromSlot = (slotId: string) => {
+    if (!hydrated) return;
     setState((prev) => ({ ...prev, slots: { ...prev.slots, [slotId]: null } }));
   };
 
@@ -392,6 +534,7 @@ export function Planner({
    * valide Formation den Spieler aufnehmen kann.
    */
   const placeOnPitch = (playerId: string) => {
+    if (!hydrated) return;
     setState((prev) => {
       const player = playerById.get(playerId);
       if (!player) return prev;
@@ -421,6 +564,7 @@ export function Planner({
   };
 
   const toggleSell = (playerId: string) => {
+    if (!hydrated) return;
     setState((prev) => {
       const has = prev.sells.includes(playerId);
       return {
@@ -431,6 +575,7 @@ export function Planner({
   };
 
   const reset = () => {
+    if (!hydrated) return;
     setState(initialState);
   };
 

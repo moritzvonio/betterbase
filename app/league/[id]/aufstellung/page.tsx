@@ -97,7 +97,8 @@ function Header() {
       </h1>
       <p className="text-sm text-muted-foreground mt-2">
         Plane deine Aufstellung, Verkaufs-Kandidaten und Budget für den nächsten Spieltag.
-        Dein Plan wird lokal gespeichert – nicht zu Kickbase übertragen.
+        Dein Plan wird an deinem Ligabase-Konto gespeichert und auf allen Geräten geladen –
+        nicht zu Kickbase übertragen.
       </p>
     </div>
   );
