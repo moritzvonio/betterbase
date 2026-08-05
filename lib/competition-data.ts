@@ -7,8 +7,11 @@
  * zeigen. Details zum Modell: docs/kickbase-bonus-regeln.md.
  */
 
+import { after } from "next/server";
 import { kb } from "@/lib/kickbase/api";
 import { withKbAuth } from "@/lib/auth";
+import { collectOnVisit } from "@/lib/collect/collector";
+import { loadLeagueCollect } from "@/lib/collect/league-store";
 import {
   computeManagerStats,
   calibrateFromOwnAccount,
@@ -36,6 +39,7 @@ export interface CompetitionData {
   residualRate: number;
   matchdaysPlayed: number;
   seasonFinished: boolean;
+  collect: { daysCovered: number; daysPlayed: number; startBudgetSource: "measured" | "default" } | null;
 }
 
 /**
@@ -61,8 +65,15 @@ export async function assembleCompetitionStats(
   if (members.length === 0) return null;
 
   const ovRecord = overview as Record<string, unknown>;
-  const initialBudget = detectInitialBudget();
   const leagueStartMs = typeof ovRecord.dt === "string" ? Date.parse(ovRecord.dt) : NaN;
+  const collect = await loadLeagueCollect(leagueId).catch(() => null);
+  const collectedStartBudget = collect?.meta?.startBudget?.value;
+  const initialBudget =
+    collectedStartBudget !== undefined &&
+    Number.isFinite(collectedStartBudget) &&
+    collectedStartBudget > 0
+      ? collectedStartBudget
+      : detectInitialBudget();
   const leagueName = typeof ovRecord.lnm === "string" ? (ovRecord.lnm as string) : null;
   const rankingRec = ranking as Record<string, unknown>;
   const matchdaysPlayed = Number(rankingRec.nd ?? 34) || 34;
@@ -137,6 +148,41 @@ export async function assembleCompetitionStats(
     };
   });
 
+  const ownStats = stats.find((s) => s.userId === userId);
+  const daysSinceStart = Number.isFinite(leagueStartMs)
+    ? Math.max(0, Math.floor((Date.now() - leagueStartMs) / 86_400_000))
+    : 0;
+  const collectArgs = {
+    token,
+    leagueId,
+    userId,
+    ranking,
+    leagueStartMs,
+    meRealCash,
+    preloaded: collect ?? undefined,
+    ownComponents: ownStats
+      ? {
+          transferNet: ownStats.transferBalance,
+          pointsPremium: ownStats.estimatedPointsBonus,
+          winBonus: ownStats.estimatedWinBonus,
+          achievementsTotal: ownStats.realAchievementBonus ?? ownStats.estimatedAchievementBonus,
+          daysSinceStart,
+        }
+      : undefined,
+  };
+
+  // Sammeln blockiert den Seitenaufruf nicht: Next führt das nach dem Response aus.
+  // Gemessen 05.08.2026 gegen Liga 089: 469 ms kalt (5 Backfill-Versuche), 0 ms warm
+  // (1h-Throttle). In der Saison mit echten Spieltagsdaten eher mehr, deshalb `after`.
+  try {
+    after(() => {
+      void collectOnVisit(collectArgs).catch(() => undefined);
+    });
+  } catch {
+    // Kein Request-Scope (z.B. Diagnose-Skript): dann eben inline, aber best-effort.
+    await collectOnVisit(collectArgs).catch(() => undefined);
+  }
+
   return {
     members,
     stats,
@@ -147,5 +193,12 @@ export async function assembleCompetitionStats(
     residualRate,
     matchdaysPlayed,
     seasonFinished,
+    collect: collect
+      ? {
+          daysCovered: Object.keys(collect.days).length,
+          daysPlayed: Number(rankingRec.day ?? 0) || 0,
+          startBudgetSource: collect.meta?.startBudget?.source ?? "default",
+        }
+      : null,
   };
 }
