@@ -226,7 +226,7 @@ export default async function WettbewerbPage({
             <div>
               <span className="font-medium text-foreground">🧮 Geschätzt (für andere Manager):</span>
               <ul className="list-disc ml-4 mt-1">
-                <li><span className="text-sky-700">Tagesbonus</span>: 100k/Tag bis zur letzten Aktivität</li>
+                <li><span className="text-sky-700">Tagesbonus</span>: 100k/Tag als volle Streak seit Liga-Start (kann überschätzen)</li>
                 <li><span className="text-violet-700">Erfolge</span>: exakte Teile (Teamwert, Meister) + Raten, die am eigenen Account geeicht sind</li>
                 <li><span className="text-amber-700">Rest-Term</span>: {residualRate.toFixed(0)} €/Punkt (aus deinem IST-Cash kalibriert)</li>
               </ul>

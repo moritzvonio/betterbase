@@ -1,7 +1,7 @@
 /**
  * Tests für das Cash-Strukturmodell (lib/competitor.ts).
  *
- * Referenzwerte stammen aus dem echten Snapshot Liga 089 (2026-07-06) —
+ * Referenzwerte stammen aus dem echten Snapshot Liga 089 (2026-07-06) –
  * eigener Account, echter Cash 50.888.168 aus /me/budget. Die Zahlen sind
  * hier als destilliertes Fixture eingefroren (keine Rohdaten nötig).
  */
@@ -68,7 +68,7 @@ describe("teamValueMilestonePayout", () => {
   });
 });
 
-describe("computeManagerStats — Strukturmodell", () => {
+describe("computeManagerStats – Strukturmodell", () => {
   it("ignoriert Transfers vor Liga-Start (Reset-Modell)", () => {
     const stats = computeManagerStats({
       userId: "u1",
@@ -81,6 +81,41 @@ describe("computeManagerStats — Strukturmodell", () => {
     expect(stats.preStartTransferCount).toBe(1);
     expect(stats.transferCount).toBe(2);
     expect(stats.transferBalance).toBe(2_000_000);
+  });
+
+  it("rechnet den Tier-Anteil aus beobachteten Spieltagspunkten exakt", () => {
+    const observedMatchdayPoints = [385, 561, 1500, 2000];
+    const expectedTiers = observedMatchdayPoints.reduce(
+      (sum, mdp) => sum + teamPointsTierPayout(mdp),
+      0
+    );
+    const stats = computeManagerStats({
+      userId: "u1",
+      name: "Test",
+      dashboard: { tp: 4446, mdw: 0 },
+      observedMatchdayPoints,
+      leagueStartMs: LEAGUE_START,
+      nowMs: NOW,
+      calibration: { ...DEFAULT_CALIBRATION, residualPerPoint: 0 },
+    });
+    expect(teamPointsTierPayout(1500)).toBe(1_000_000);
+    expect(expectedTiers).toBe(3_100_000);
+    expect(stats.achievementParts.tiers).toBe(expectedTiers);
+    expect(stats.tiersObserved).toBe(true);
+  });
+
+  it("schätzt den Tier-Anteil ohne beobachtete Daten weiter über die Rate", () => {
+    const cal = { ...DEFAULT_CALIBRATION, tierPayoutPerPoint: 321, residualPerPoint: 0 };
+    const stats = computeManagerStats({
+      userId: "u1",
+      name: "Test",
+      dashboard: { tp: 1234, mdw: 0 },
+      leagueStartMs: LEAGUE_START,
+      nowMs: NOW,
+      calibration: cal,
+    });
+    expect(stats.achievementParts.tiers).toBe(cal.tierPayoutPerPoint * 1234);
+    expect(stats.tiersObserved).toBe(false);
   });
 
   it("übernimmt IST-Cash für den eigenen User und liefert den Validierungsfehler", () => {
@@ -116,7 +151,7 @@ describe("computeManagerStats — Strukturmodell", () => {
     expect(MATCHDAY_WIN_PREMIUM).toBe(1_000_000);
   });
 
-  it("Tagesbonus endet 7 Tage nach letztem Transfer (Inaktivitäts-Heuristik)", () => {
+  it("Tagesbonus hängt nicht mehr vom letzten Transfer ab", () => {
     const active = computeManagerStats({
       userId: "a",
       name: "Aktiv",
@@ -133,14 +168,17 @@ describe("computeManagerStats — Strukturmodell", () => {
       nowMs: NOW,
       calibration: { ...DEFAULT_CALIBRATION, residualPerPoint: 0 },
     });
-    expect(active.daysActive).toBe(287);
-    expect(inactive.daysActive).toBe(107);
-    expect(active.estimatedLoginBonus).toBeGreaterThan(inactive.estimatedLoginBonus);
+    const daysSinceStart = Math.max(0, Math.floor((NOW - LEAGUE_START) / DAY));
+    const expectedDailyBonus = estimateDailyBonus(daysSinceStart);
+    expect(active.daysActive).toBe(daysSinceStart);
+    expect(inactive.daysActive).toBe(daysSinceStart);
+    expect(active.estimatedLoginBonus).toBe(expectedDailyBonus);
+    expect(inactive.estimatedLoginBonus).toBe(expectedDailyBonus);
   });
 });
 
 describe("Referenz-Validierung Liga 089 (destilliertes Fixture)", () => {
-  // Eigener Account, Snapshot 2026-07-06 — echte Aggregat-Werte:
+  // Eigener Account, Snapshot 2026-07-06 – echte Aggregat-Werte:
   const REAL_CASH = 50_888_168;
   const TP = 39_641;
   const MDW = 13;
@@ -166,8 +204,6 @@ describe("Referenz-Validierung Liga 089 (destilliertes Fixture)", () => {
     const ownStats = computeManagerStats({
       userId: "me",
       name: "Chief",
-      // letzter Transfer wie real Mitte Mai (Tag ~285) → Tagesbonus-Heuristik
-      // liegt nahe an der echten Feed-Rekonstruktion (28,44M)
       transfers: [tx(5, 1, BOUGHT), tx(285, 2, SOLD)],
       dashboard: { tp: TP, mdw: MDW, pl: 1 },
       leagueStartMs: LEAGUE_START,

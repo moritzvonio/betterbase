@@ -1,13 +1,19 @@
 /**
  * Cash-Modell-Validierung: lässt das Strukturmodell (lib/competitor.ts)
  * gegen die Snapshots laufen. Der eigene Account wird dabei WIE EIN
- * KONKURRENT behandelt (ohne IST-Cash-Anker) — der Fehler gegen den echten
+ * KONKURRENT behandelt (ohne IST-Cash-Anker) – der Fehler gegen den echten
  * Cash aus /me/budget ist die ehrliche Modellgüte.
  *
  * Run: pnpm tsx scripts/cash-validate.ts [snapshot.json ...]
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+
+function rankingRows(ranking: unknown): Array<Record<string, unknown>> {
+  const rec = ranking as Record<string, unknown> | null | undefined;
+  const rows = rec?.us ?? rec?.it;
+  return Array.isArray(rows) ? (rows as Array<Record<string, unknown>>) : [];
+}
 
 async function main() {
   const { computeManagerStats, calibrateFromOwnAccount, calibrateResidualPerPoint, DEFAULT_CALIBRATION } =
@@ -28,11 +34,48 @@ async function main() {
     const leagueStartMs = Date.parse(String(s.overview.dt ?? ""));
     const nowMs = Date.parse(s.meta.fetchedAt);
     const realCash = Number(s.myBudget?.b ?? NaN);
-    const members = (s.ranking.us ?? s.ranking.it ?? []) as Array<Record<string, unknown>>;
+    const members = rankingRows(s.ranking);
     const leagueTotalPoints = members.reduce((sum: number, u) => sum + Number(u.sp ?? 0), 0);
-    const seasonFinished = Number(s.ranking.day ?? 0) >= Number(s.ranking.nd ?? 34);
+    const daysPlayed = Number(s.ranking.day ?? 0) || 0;
+    const seasonFinished = daysPlayed >= Number(s.ranking.nd ?? 34);
+    const perDayRankings = (s.perDayRankings ?? {}) as Record<string, unknown>;
 
-    console.log(`\n═══ ${s.meta.leagueName} (${s.meta.leagueId}) — echter Cash ${fmtM(realCash)} ═══`);
+    const realRowsByDay = new Map<number, Array<Record<string, unknown>>>();
+    for (let day = 1; day <= daysPlayed; day++) {
+      const rows = rankingRows(perDayRankings[String(day)]);
+      const pointsSum = rows.reduce((sum, u) => {
+        const mdp = Number(u.mdp ?? 0);
+        return sum + (Number.isFinite(mdp) ? mdp : 0);
+      }, 0);
+      if (pointsSum > 0) realRowsByDay.set(day, rows);
+    }
+
+    const observedPointsByManager = new Map<string, number[]>();
+    if (daysPlayed > 0 && realRowsByDay.size >= daysPlayed) {
+      for (const member of members) {
+        const uid = String(member.i);
+        const points: number[] = [];
+        let complete = true;
+        for (let day = 1; day <= daysPlayed; day++) {
+          const row = realRowsByDay.get(day)?.find((u) => String(u.i) === uid);
+          const mdp = Number(row?.mdp);
+          if (!row || !Number.isFinite(mdp)) {
+            complete = false;
+            break;
+          }
+          points.push(mdp);
+        }
+        if (complete) observedPointsByManager.set(uid, points);
+      }
+    }
+    const tiersObserved = members.length > 0 && observedPointsByManager.size === members.length;
+
+    console.log(`\n═══ ${s.meta.leagueName} (${s.meta.leagueId}) – echter Cash ${fmtM(realCash)} ═══`);
+    console.log(
+      `Tier-Anteil: ${
+        tiersObserved ? `beobachtet (${daysPlayed} Spieltage)` : "geschätzt (Rate)"
+      }`
+    );
 
     const base = (uid: string) => {
       const m = s.managers[uid];
@@ -49,6 +92,7 @@ async function main() {
         seasonFinished,
         matchdaysPlayed: Number(s.ranking.nd ?? 34) || 34,
         leagueTotalPoints,
+        observedMatchdayPoints: observedPointsByManager.get(uid),
       };
     };
 

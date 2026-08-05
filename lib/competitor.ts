@@ -30,6 +30,7 @@ import {
   MATCHDAY_WIN_PREMIUM,
   POINTS_PREMIUM_PER_POINT,
   SELL_TO_LEAGUE_FACTOR,
+  teamPointsTierPayout,
 } from "./kickbase/bonus-catalog";
 
 export const SELL_TO_BANK_FACTOR = SELL_TO_LEAGUE_FACTOR;
@@ -160,10 +161,12 @@ export interface ManagerComputedStats {
   estimatedWinBonus: number;
   /** Tagesbonus-Schätzung (streak-basiert) */
   estimatedLoginBonus: number;
-  /** Tage Liga-Start → letzte Aktivität (Basis Tagesbonus) */
+  /** Tage seit Liga-Start (Basis Tagesbonus) */
   daysActive: number;
   /** Achievement-Schätzung gesamt (bzw. exakter API-Wert beim eigenen User) */
   estimatedAchievementBonus: number;
+  /** true, wenn der Tier-Anteil aus beobachteten Spieltagen exakt gerechnet wurde */
+  tiersObserved: boolean;
   /** Aufschlüsselung der Achievement-Schätzung */
   achievementParts: {
     flatBase: number;
@@ -230,6 +233,11 @@ export interface ComputeManagerInput {
   matchdaysPlayed?: number;
   /** Σ Saisonpunkte aller Manager (für MVP-Anteil) */
   leagueTotalPoints?: number;
+  /**
+   * Gesammelte Spieltagspunkte dieses Managers (aus dem Liga-Archiv).
+   * NUR setzen, wenn die Coverage vollständig ist – sonst wird weiter geschätzt.
+   */
+  observedMatchdayPoints?: number[];
   /** Kalibrierte Raten (aus eigenem Account); Default: Liga-089-Konstanten */
   calibration?: CashCalibration;
   /** Echte Achievement-Daten (nur eigener User) */
@@ -251,7 +259,6 @@ export function computeManagerStats(inp: ComputeManagerInput): ManagerComputedSt
   let totalSold = 0;
   let transferCount = 0;
   let preStartTransferCount = 0;
-  let lastTxMs = -Infinity;
   for (const t of transfers) {
     const ts = Date.parse(t.dt);
     if (!Number.isFinite(ts) || ts <= inp.leagueStartMs) {
@@ -259,7 +266,6 @@ export function computeManagerStats(inp: ComputeManagerInput): ManagerComputedSt
       continue;
     }
     transferCount++;
-    if (ts > lastTxMs) lastTxMs = ts;
     if (t.tty === 1) totalBought += t.trp ?? 0;
     else if (t.tty === 2) totalSold += t.trp ?? 0;
   }
@@ -274,10 +280,10 @@ export function computeManagerStats(inp: ComputeManagerInput): ManagerComputedSt
   const pointsPremium = tp * POINTS_PREMIUM_PER_POINT;
   const winBonus = mdw * MATCHDAY_WIN_PREMIUM;
 
-  // Tagesbonus: Liga-Start → letzte beobachtete Aktivität (+7 Tage Auslauf),
-  // gedeckelt auf jetzt. Wer nicht mehr handelt, loggt sich meist auch nicht ein.
-  const activeUntil = Math.min(now, Number.isFinite(lastTxMs) ? lastTxMs + 7 * 86_400_000 : now);
-  const daysActive = Math.max(0, Math.floor((activeUntil - inp.leagueStartMs) / 86_400_000));
+  // Tagesbonus: volle Streak seit Liga-Start. Entscheidung Mourice 05.08.2026 –
+  // die frühere Aktivitäts-Heuristik (letzter Transfer + 7 Tage Auslauf) entfällt
+  // ersatzlos. Kippt eine Unterschätzung in eine leichte Überschätzung.
+  const daysActive = Math.max(0, Math.floor((now - inp.leagueStartMs) / 86_400_000));
   const dailyBonus = estimateDailyBonus(daysActive);
 
   // Squad / Teamwert
@@ -298,9 +304,14 @@ export function computeManagerStats(inp: ComputeManagerInput): ManagerComputedSt
         ? ACHIEVEMENT_ER[2002]
         : 0
     : 0;
+  const observedMatchdayPoints = inp.observedMatchdayPoints;
+  const tiersObserved = observedMatchdayPoints !== undefined && observedMatchdayPoints.length > 0;
+  const tiers = tiersObserved
+    ? observedMatchdayPoints.reduce((s, mdp) => s + teamPointsTierPayout(mdp), 0)
+    : cal.tierPayoutPerPoint * tp;
   const achievementParts = {
     flatBase: cal.flatBase,
-    tiers: cal.tierPayoutPerPoint * tp,
+    tiers,
     playerAchievements: cal.playerAchPayoutPerPoint * tp,
     mvp: mvpShare,
     hand: cal.handPayoutPerSoldEuro * totalSold,
@@ -350,6 +361,7 @@ export function computeManagerStats(inp: ComputeManagerInput): ManagerComputedSt
     estimatedLoginBonus: dailyBonus,
     daysActive,
     estimatedAchievementBonus,
+    tiersObserved,
     achievementParts,
     calibratedResidualBonus,
     realAchievementBonus,

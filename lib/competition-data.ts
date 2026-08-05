@@ -76,8 +76,9 @@ export async function assembleCompetitionStats(
       : detectInitialBudget();
   const leagueName = typeof ovRecord.lnm === "string" ? (ovRecord.lnm as string) : null;
   const rankingRec = ranking as Record<string, unknown>;
+  const daysPlayed = Number(rankingRec.day ?? 0) || 0;
   const matchdaysPlayed = Number(rankingRec.nd ?? 34) || 34;
-  const seasonFinished = Number(rankingRec.day ?? 0) >= matchdaysPlayed;
+  const seasonFinished = daysPlayed >= matchdaysPlayed;
   const leagueTotalPoints = members.reduce((s, u) => s + (u.sp ?? 0), 0);
 
   const memberData = await Promise.all(
@@ -105,6 +106,23 @@ export async function assembleCompetitionStats(
       ? calibrateFromOwnAccount({ achievements: ownAchievements, ownTp, ownSoldVolume })
       : DEFAULT_CALIBRATION;
 
+  const observedPointsByManager = new Map<string, number[]>();
+  if (daysPlayed > 0 && collect && Object.keys(collect.days).length >= daysPlayed) {
+    for (const member of members) {
+      const points: number[] = [];
+      let complete = true;
+      for (let day = 1; day <= daysPlayed; day++) {
+        const rec = collect.days[day]?.perManager[member.i];
+        if (!rec) {
+          complete = false;
+          break;
+        }
+        points.push(rec.mdp);
+      }
+      if (complete) observedPointsByManager.set(member.i, points);
+    }
+  }
+
   const buildInput = (d: (typeof memberData)[number], cal: typeof DEFAULT_CALIBRATION) => {
     const isMe = d.manager.i === userId;
     return {
@@ -120,6 +138,7 @@ export async function assembleCompetitionStats(
       seasonFinished,
       matchdaysPlayed,
       leagueTotalPoints,
+      observedMatchdayPoints: observedPointsByManager.get(d.manager.i),
       calibration: cal,
       achievements: isMe && ownAchievements.total > 0 ? ownAchievements : undefined,
       realCashFromApi: isMe ? meRealCash : undefined,
@@ -196,7 +215,7 @@ export async function assembleCompetitionStats(
     collect: collect
       ? {
           daysCovered: Object.keys(collect.days).length,
-          daysPlayed: Number(rankingRec.day ?? 0) || 0,
+          daysPlayed,
           startBudgetSource: collect.meta?.startBudget?.source ?? "default",
         }
       : null,
