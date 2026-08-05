@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
 import {
-  setPushSubscription,
-  clearPushSubscription,
-  getPushSubscription,
+  addPushSubscription,
+  getPushSubscriptions,
+  removePushSubscription,
 } from "@/lib/push";
 
 export const runtime = "nodejs";
@@ -17,9 +17,18 @@ const Body = z.object({
   }),
 });
 
+const DeleteBody = z.object({
+  endpoint: z.string().url(),
+});
+
 export async function GET() {
-  const sub = await getPushSubscription();
-  return NextResponse.json({ subscribed: !!sub });
+  const s = await getSession();
+  if (!s) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+
+  // Serverstatus meint: Der User hat irgendein Gerät registriert. Ob dieses
+  // konkrete Gerät aktiv ist, prüft der Client über pushManager.getSubscription().
+  const subscriptions = await getPushSubscriptions(s.userId);
+  return NextResponse.json({ subscribed: subscriptions.length > 0 });
 }
 
 export async function POST(req: Request) {
@@ -32,18 +41,24 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
   }
-  await setPushSubscription({
+  await addPushSubscription(s.userId, {
     endpoint: body.endpoint,
     keys: body.keys,
-    userId: s.userId,
-    createdAt: Math.floor(Date.now() / 1000),
   });
   return NextResponse.json({ ok: true });
 }
 
-export async function DELETE() {
+export async function DELETE(req: Request) {
   const s = await getSession();
   if (!s) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  await clearPushSubscription();
+
+  let body;
+  try {
+    body = DeleteBody.parse(await req.json());
+  } catch {
+    return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
+  }
+
+  await removePushSubscription(s.userId, body.endpoint);
   return NextResponse.json({ ok: true });
 }

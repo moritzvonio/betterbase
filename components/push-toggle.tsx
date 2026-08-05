@@ -24,16 +24,41 @@ export function PushToggle() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    let active = true;
+    const controller = new AbortController();
+
     const ok =
       "serviceWorker" in navigator &&
       "PushManager" in window &&
       "Notification" in window;
-    setSupported(ok);
+    if (active) setSupported(ok);
     if (!ok) return;
-    fetch("/api/push/subscribe")
-      .then((r) => r.json())
-      .then((d) => setEnabled(!!d.subscribed))
-      .catch(() => undefined);
+
+    async function loadState() {
+      try {
+        const reg = await navigator.serviceWorker.getRegistration("/");
+        if (!reg) throw new Error("NO_REGISTRATION");
+        const sub = await reg.pushManager.getSubscription();
+        if (active) setEnabled(!!sub);
+      } catch {
+        try {
+          const r = await fetch("/api/push/subscribe", { signal: controller.signal });
+          if (!r.ok) return;
+          const d = await r.json();
+          if (active) setEnabled(!!d.subscribed);
+        } catch {
+          // Best-effort Fallback: Wenn weder Browser noch Server antworten,
+          // bleibt der Toggle im sicheren Standardzustand.
+        }
+      }
+    }
+
+    void loadState();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, []);
 
   async function enable() {
@@ -91,8 +116,21 @@ export function PushToggle() {
   async function disable() {
     const reg = await navigator.serviceWorker.getRegistration("/");
     const existing = await reg?.pushManager.getSubscription();
-    if (existing) await existing.unsubscribe();
-    await fetch("/api/push/subscribe", { method: "DELETE" });
+    const endpoint = existing?.endpoint;
+    if (!existing || !endpoint) {
+      setEnabled(false);
+      return;
+    }
+
+    await existing.unsubscribe();
+    // Abgemeldet ist abgemeldet: der Browser hat die Subscription schon
+    // verworfen. Scheitert das Aufräumen auf dem Server, darf der Schalter
+    // trotzdem nicht auf "aktiv" stehen bleiben.
+    await fetch("/api/push/subscribe", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint }),
+    }).catch(() => undefined);
     setEnabled(false);
   }
 
