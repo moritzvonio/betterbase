@@ -82,7 +82,7 @@ export const FAQ_ITEMS: FaqEntry[] = [
   },
   {
     q: "Was kostet Ligabase und ist es offiziell mit Kickbase verbunden?",
-    a: "Ligabase ist ein unabhängiges Companion-Tool und nicht offiziell mit Kickbase, der DFL oder einem Bundesliga-Verein verbunden. Dashboard, Top-50, News und Aufstellungs-Planer sind dauerhaft kostenlos. Die Pro-Flächen – Kontostände und Max-Gebote aller Mitspieler sowie der Bid-Advisor – testest du bis einschließlich Spieltag 2 gratis und schaltest sie danach für 6 € pro Halbserie frei (Einmalzahlung, kein Abo). Dein Passwort wird nie gespeichert, sondern nur einmalig gegen einen Token getauscht.",
+    a: "Ligabase ist ein unabhängiges Companion-Tool und nicht offiziell mit Kickbase, der DFL oder einem Bundesliga-Verein verbunden. Aktuell läuft die offene Beta: Alle Features – Dashboard, Top-50, News, Aufstellungs-Planer, die Kontostände und Max-Gebote aller Mitspieler sowie der Bid-Advisor – sind komplett kostenlos. Nach der Beta kann ein kleiner Preis für einzelne Pro-Flächen kommen. Dein Passwort wird nie gespeichert, sondern nur einmalig gegen einen Token getauscht.",
   },
   {
     q: "Was ist das beste kostenlose Kickbase-Tool?",

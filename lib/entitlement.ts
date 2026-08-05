@@ -22,6 +22,14 @@ const COOKIE = "bb_entitlement";
 const ALGO = "dir";
 const ENC = "A256GCM";
 
+/**
+ * Offene Beta: ALLE Gate-Flächen (Wettbewerb, Bid-Advisor, Chart, Snapshots)
+ * sind für jeden eingeloggten User frei. Stripe/Trial/Referral-Code bleibt
+ * schlafend erhalten. Zum Scharfschalten des Pricings auf `false` drehen und
+ * die Beta-Copy auf Landing, /upgrade und /account zurückbauen.
+ */
+export const FREE_BETA = true;
+
 // Neue Halbserien-Pläne + Legacy-Werte (monthly/season) für Abwärtskompatibilität.
 export type Plan = "hinrunde-2627" | "rueckrunde-2627" | "monthly" | "season";
 
@@ -73,6 +81,7 @@ export async function clearEntitlement() {
 }
 
 export async function hasPro(forUserId?: string): Promise<boolean> {
+  if (FREE_BETA) return true;
   const e = await getEntitlement();
   if (!e) return false;
   if (forUserId && e.userId !== forUserId) return false;
@@ -130,6 +139,8 @@ export interface Access {
  * Gate-Flächen (Wettbewerb, Bid-Advisor) sind frei, solange `pro || trial`.
  */
 export async function getAccess(userId: string): Promise<Access> {
+  if (FREE_BETA) return { pro: true, trial: false };
+
   const ent = await getEntitlement();
   const paidPro = !!ent && ent.userId === userId;
 

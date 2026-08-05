@@ -39,7 +39,7 @@ const BASE = env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
 export const metadata: Metadata = {
   title: { absolute: "Kickbase Tool – Kontostände, Max-Gebote & Marktwerte | Ligabase" },
   description:
-    "Ligabase zeigt dir die geschätzten Kontostände und Max-Gebote aller Mitspieler deiner Kickbase-Liga – plus Bid-Advisor, Live-Punkte und Top-50. Kostenlos testen bis Spieltag 2.",
+    "Ligabase zeigt dir die geschätzten Kontostände und Max-Gebote aller Mitspieler deiner Kickbase-Liga – plus Bid-Advisor, Live-Punkte und Top-50. In der offenen Beta komplett kostenlos.",
   keywords: [
     "Kickbase Tool",
     "Kickbase Marktwerte",
@@ -99,7 +99,7 @@ function SiteHeader() {
         <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-muted-foreground">
           <a href="#features" className="hover:text-foreground transition">Features</a>
           <a href="#preview" className="hover:text-foreground transition">Preview</a>
-          <a href="#pricing" className="hover:text-foreground transition">Preise</a>
+          <a href="#pricing" className="hover:text-foreground transition">Beta</a>
           <a href="#faq" className="hover:text-foreground transition">FAQ</a>
           <Link href="/blog" className="hover:text-foreground transition">Blog</Link>
         </nav>
@@ -133,7 +133,7 @@ function Hero() {
         <div className="text-center">
           <Badge variant="default" className="mb-6 slide-up gap-1.5 py-1 px-3">
             <span className="size-1.5 rounded-full bg-primary pulse-dot" />
-            Saison 26/27 – kostenlos testen bis Spieltag 2
+            Saison 26/27 – offene Beta, alles kostenlos
           </Badge>
 
           <h1 className="text-5xl sm:text-7xl font-bold tracking-tight max-w-4xl mx-auto leading-[0.95] slide-up slide-up-1">
@@ -170,7 +170,7 @@ function Hero() {
               <Globe className="size-3.5 text-primary" /> Hosting in DE
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <CheckCircle2 className="size-3.5 text-primary" /> Kostenlos bis Spieltag 2
+              <CheckCircle2 className="size-3.5 text-primary" /> Kostenlos in der Beta
             </span>
           </div>
         </div>
@@ -294,7 +294,7 @@ function StatsStrip() {
   const stats: Array<{ value?: string; icon?: React.ReactNode; label: string }> = [
     { value: "432", label: "Bundesliga-Spieler im Blick" },
     { value: "18", label: "Vereins-Quellen + Kicker & Sportschau" },
-    { value: "0 €", label: "bis einschließlich Spieltag 2" },
+    { value: "0 €", label: "alles kostenlos in der Beta" },
     { icon: <MapPin className="size-5 text-primary" />, label: "Hosting in Deutschland" },
   ];
   return (
@@ -559,50 +559,33 @@ function PlayerCardPreview({
   );
 }
 
-/* ─── Pricing ──────────────────────────────────────────── */
+/* ─── Beta (ex Pricing – Preismodell kommt nach der Beta zurück) ── */
 function Pricing() {
   return (
     <section id="pricing" className="py-20 sm:py-28">
       <div className="mx-auto max-w-6xl px-4">
         <SectionHeading
-          eyebrow="Preise"
-          title="Fair gepreist, klar bezahlt"
-          description="Der komplette Free-Tier plus ein kleiner Pro-Hebel. Kein Abo, keine automatische Verlängerung."
+          eyebrow="Beta"
+          title="Offene Beta – alles kostenlos"
+          description="Ligabase ist in der offenen Beta. Alle Features sind freigeschaltet – kein Abo, keine Zahlung, kein Haken."
         />
-        <div className="mt-14 grid gap-5 md:grid-cols-2 max-w-3xl mx-auto">
+        <div className="mt-14 max-w-md mx-auto">
           <PricingCard
-            name="Free"
+            name="Beta"
             price="0 €"
-            period="für immer"
-            tagline="Dashboard, Top-50, News und Planer – dauerhaft frei."
+            period="während der Beta"
+            tagline="Einloggen mit Kickbase – mehr braucht es nicht."
+            highlight="Offene Beta"
             features={[
               { ok: true, text: "Liga-Dashboard & Tabelle" },
-              { ok: true, text: "Eigenes Team & Marktwerte" },
-              { ok: true, text: "Top-50-Punkteliste" },
-              { ok: true, text: "News mit Spieler-Tagging" },
-              { ok: true, text: "Aufstellungs-Planer" },
-            ]}
-            cta={
-              <Button asChild variant="outline" className="w-full">
-                <Link href="/login">Loslegen</Link>
-              </Button>
-            }
-          />
-          <PricingCard
-            name="Pro"
-            price="6 €"
-            period="pro Halbserie"
-            tagline="Einmalzahlung, kein Abo."
-            highlight="Kostenlos testen"
-            features={[
-              { ok: true, text: "Alles aus Free" },
               { ok: true, text: "Wettbewerb: Kontostände + Max-Gebote aller Manager" },
               { ok: true, text: "Bid-Advisor" },
               { ok: true, text: "Netto-Teamwert-Verlauf der Liga" },
+              { ok: true, text: "Top-50, News mit Spieler-Tagging, Aufstellungs-Planer" },
             ]}
             cta={
               <Button asChild className="w-full card-glow">
-                <Link href="/upgrade">Pro freischalten</Link>
+                <Link href="/login">Kostenlos loslegen</Link>
               </Button>
             }
             featured
@@ -610,8 +593,8 @@ function Pricing() {
         </div>
 
         <p className="mt-10 max-w-2xl mx-auto text-center text-sm text-muted-foreground">
-          Alles kostenlos bis einschließlich Spieltag 2 – danach bleiben Wettbewerb und
-          Bid-Advisor mit Pro frei, 6 € pro Halbserie.
+          Nach der Beta kann ein kleiner Preis für einzelne Pro-Flächen kommen –
+          solange die Beta läuft, ist alles frei.
         </p>
       </div>
     </section>
