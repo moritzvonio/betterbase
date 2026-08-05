@@ -6,7 +6,10 @@ import { getSession } from "@/lib/session";
 export const runtime = "nodejs";
 
 export async function GET() {
-  const list = await getWatched();
+  const s = await getSession();
+  if (!s) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+
+  const list = await getWatched(s.userId);
   return NextResponse.json({ players: list });
 }
 
@@ -26,6 +29,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
   }
   const next =
-    body.action === "add" ? await watchPlayer(body.playerId) : await unwatchPlayer(body.playerId);
+    body.action === "add"
+      ? await watchPlayer(s.userId, body.playerId)
+      : await unwatchPlayer(s.userId, body.playerId);
   return NextResponse.json({ ok: true, players: next });
 }

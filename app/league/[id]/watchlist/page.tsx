@@ -23,7 +23,7 @@ export default async function WatchlistPage({
   const { id: leagueId } = await params;
   const path = `/league/${leagueId}/watchlist`;
   const session = await requireSessionOrRedirect(path);
-  const ids = await getWatched();
+  const ids = await getWatched(session.userId);
 
   const players = await Promise.all(
     ids.map((pid) =>

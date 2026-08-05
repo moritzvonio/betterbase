@@ -73,7 +73,7 @@ export default async function PlayerPage({
     withKbAuth(path, () => kb.player(session.token, leagueId, playerId)).catch(() => null),
     withKbAuth(path, () => kb.marketValue(session.token, leagueId, playerId, 92)).catch(() => null),
     withKbAuth(path, () => kb.performance(session.token, leagueId, playerId)).catch(() => null),
-    isWatched(playerId),
+    isWatched(session.userId, playerId),
   ]);
 
   if (!player) notFound();
