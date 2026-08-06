@@ -20,8 +20,10 @@ const g = globalThis as unknown as {
 const mem = g.__bbPlan ?? (g.__bbPlan = new Map<string, StoredPlannerState>());
 
 export const PlannerBody = z.object({
-  slots: z.record(z.string(), z.string().nullable()),
-  sells: z.array(z.string()),
+  // Slot-IDs wie "gk1" und Spieler-IDs sind kurze Strings – die Längen-Caps
+  // verhindern, dass ein eingeloggter User den KV-Value aufbläht.
+  slots: z.record(z.string().max(50), z.string().max(50).nullable()),
+  sells: z.array(z.string().max(50)),
 });
 
 const StoredPlannerBody = PlannerBody.extend({

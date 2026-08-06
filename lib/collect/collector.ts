@@ -125,8 +125,10 @@ export async function collectOnVisit(opts: CollectOnVisitOpts): Promise<void> {
             ownComponents.achievementsTotal -
             estimateDailyBonus(ownComponents.daysSinceStart)
         );
+        // Kickbase erlaubt Custom-Startbudgets bis 500M – der Deckel schützt nur
+        // gegen offensichtlich kaputte Messungen, nicht gegen legitime Ligen.
         meta.startBudget =
-          measured > 0 && measured <= 200_000_000
+          measured > 0 && measured <= 500_000_000
             ? { value: measured, source: "measured", measuredAt: now }
             : { value: INITIAL_BUDGET, source: "default", measuredAt: now };
         metaChanged = true;
@@ -148,18 +150,19 @@ export async function collectOnVisit(opts: CollectOnVisitOpts): Promise<void> {
 
     if (shouldBackfill) {
       const { kb } = await import("../kickbase/api");
-      const missingDays = Array.from({ length: currentDay }, (_, i) => i + 1)
-        .filter((day) => !Object.prototype.hasOwnProperty.call(days, day))
-        .slice(0, 5);
+      const missingDays = Array.from({ length: currentDay }, (_, i) => i + 1).filter(
+        (day) => !Object.prototype.hasOwnProperty.call(days, day)
+      );
 
       // Der aktuelle Spieltag kann beim ersten Einsammeln noch GELAUFEN sein.
       // `ranking.day` ist der laufende Spieltag, nicht der letzte beendete
       // (`lfmd` taugt dafür nicht: gemessen am 05.08.2026 liefert die API
       // day=34 bei lfmd=1). Deshalb fassen wir beim aktuellen Tag noch einmal
-      // nach, solange die Punkte noch wachsen.
+      // nach, solange die Punkte noch wachsen. Insgesamt hart auf 5 Calls je
+      // Besuch gedeckelt (die Nachfassung zählt mit).
       const targets = Object.prototype.hasOwnProperty.call(days, currentDay)
-        ? [...missingDays, currentDay]
-        : missingDays;
+        ? [...missingDays.slice(0, 4), currentDay]
+        : missingDays.slice(0, 5);
 
       for (const day of targets) {
         const resp = await kb.ranking(token, leagueId, day).catch(() => null);

@@ -10,15 +10,15 @@ import {
 export const runtime = "nodejs";
 
 const Body = z.object({
-  endpoint: z.string().url(),
+  endpoint: z.string().url().max(2000),
   keys: z.object({
-    p256dh: z.string().min(1),
-    auth: z.string().min(1),
+    p256dh: z.string().min(1).max(300),
+    auth: z.string().min(1).max(300),
   }),
 });
 
 const DeleteBody = z.object({
-  endpoint: z.string().url(),
+  endpoint: z.string().url().max(2000),
 });
 
 export async function GET() {

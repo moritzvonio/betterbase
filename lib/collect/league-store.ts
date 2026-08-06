@@ -71,11 +71,6 @@ function capDays(days: LeagueCollectDays): LeagueCollectDays {
   return capped;
 }
 
-/** Ob das persistente Sammelarchiv verfügbar ist. */
-export function collectConfigured(): boolean {
-  return KV;
-}
-
 export async function loadLeagueCollect(
   leagueId: string
 ): Promise<{ meta: LeagueCollectMeta | null; days: LeagueCollectDays } | null> {

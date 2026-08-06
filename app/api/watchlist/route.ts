@@ -14,7 +14,7 @@ export async function GET() {
 }
 
 const Body = z.object({
-  playerId: z.string().min(1),
+  playerId: z.string().min(1).max(50),
   action: z.enum(["add", "remove"]),
 });
 
