@@ -121,7 +121,9 @@ export default async function MarketPage({
   // Differenzierung gegen Kickly: User sieht sofort wenn ein angebotener Spieler
   // aktuelle News (Verletzung, Aufstellungs-Zweifel) hat – Kaufrisiko-Signal.
   const allMarketPids = items.map((it) => marketEntryPid(it)).filter(Boolean);
-  const recentNews = await getRecentNewsForPlayers(allMarketPids, { limit: 200 });
+  const recentNews = await getRecentNewsForPlayers(allMarketPids, {
+    limit: 200,
+  }).catch(() => []);
   const newsByPlayer = new Map<string, number>();
   const sinceMs = Date.now() - 24 * 60 * 60 * 1000;
   for (const news of recentNews) {
@@ -364,15 +366,13 @@ export default async function MarketPage({
                         const newsCount = newsByPlayer.get(pid) ?? 0;
                         if (newsCount === 0) return null;
                         return (
-                          <Link
-                            href={`/league/${leagueId}/spieler/${pid}#news`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-rose-50 text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100"
+                          <span
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-rose-50 text-rose-700 ring-1 ring-rose-200"
                             title={`${newsCount} aktuelle News (24h) zu diesem Spieler`}
                           >
                             <Newspaper className="size-3" />
                             {newsCount} News
-                          </Link>
+                          </span>
                         );
                       })()}
                       {p.exs !== undefined && p.exs > 0 && (
