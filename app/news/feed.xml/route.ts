@@ -19,7 +19,7 @@ function escapeXml(s: string): string {
 }
 
 export async function GET() {
-  const items = await getRecentNews({ limit: 50 });
+  const items = await getRecentNews({ limit: 50 }).catch(() => []);
   const baseUrl = env.NEXT_PUBLIC_APP_URL;
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
